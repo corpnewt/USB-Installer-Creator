@@ -29,6 +29,7 @@ scriptName="Create USB Installer"
 scriptMessage="Select your USB drive:"
 
 # Allow creation without erasing the drive first
+eraseFirst="Yes"
 # Allow the use of *just* the InstallESD.dmg
 
 function resetVars () {
@@ -104,6 +105,7 @@ function mainMenu () {
 	echo 2. Create With asr \(older way\)
 	echo 
 	echo ?. Help
+    echo E. Erase the USB [Currently: "$eraseFirst"]
 	echo 
 	echo Q. Quit
 	echo 
@@ -117,10 +119,21 @@ function mainMenu () {
 		createUSBESD
 	elif [[ "$menuChoice" == "q" ]]; then
 		customQuit
+    elif [[ "$menuChoice" == "e" ]]; then
+		toggleErase
 	elif [[ "$menuChoice" == "?" ]]; then
 		mainHelp
 	fi
 	mainMenu
+}
+
+function toggleErase () {
+    if [[ "$eraseFirst" == "Yes" ]]; then
+        eraseFirst="No"
+    else
+        eraseFirst="Yes"
+    fi
+    return 0
 }
 
 function trimWhitespace () {
@@ -175,8 +188,8 @@ function createUSBESD () {
 
 	clear
 
-	echo Please drag and drop the \"$installerName\" application
-	echo here or type the path:
+	echo Please drag and drop the \"$installerName\" application or
+    echo \"InstallESD.dmg\" here or type the path:
 	echo 
 	echo 
 	read insDir
@@ -185,18 +198,35 @@ function createUSBESD () {
 		createUSBESD
         return 0
 	fi
+    
+    esdCheck="$( basename "$insDir" )"
 
-	if [ ! -e "$insDir/Contents/SharedSupport/InstallESD.dmg" ]; then
-		clear
-		echo Required files were missing in the installer.
-		echo 
-		echo "$insDir/Contents/SharedSupport/InstallESD.dmg"
-		echo Does not exist.
-		echo 
-		exit
-	fi
+    if [[ "$esdCheck" == "InstallESD.dmg" ]]; then
+        # We have an InstallESD.dmg - let's proceed accordingly
+        if [ ! -e "$insDir" ]; then
+            clear
+            echo Required files were missing in the installer.
+            echo 
+            echo "$insDir/Contents/SharedSupport/InstallESD.dmg"
+            echo Does not exist.
+            echo 
+            exit
+        fi
+        insESD="$insDir"
+    else
+        # Not an InstallESD.dmg - let's check for one
+        if [ ! -e "$insDir/Contents/SharedSupport/InstallESD.dmg" ]; then
+            clear
+            echo Required files were missing in the installer.
+            echo 
+            echo "$insDir/Contents/SharedSupport/InstallESD.dmg"
+            echo Does not exist.
+            echo 
+            exit
+        fi
 
-	insESD="$insDir/Contents/SharedSupport/InstallESD.dmg"
+        insESD="$insDir/Contents/SharedSupport/InstallESD.dmg"
+    fi
     
     clear
 	
@@ -214,20 +244,23 @@ function eraseUSBESD () {
 	clear
 	echo \#\#\# Create USB Installer \#\#\#
 	echo 
-	echo Unmounting "$usbName"...
-	echo 
+    
+    
+    if [[ "$eraseFirst" == "Yes" ]]; then
+	   echo Unmounting "$usbName"...
+       echo 
 
-	checkMount "$usbMount"
-
-	# Reformat it to Journaled HFS+ with a GUID Partition Table
-	#clear
-	#echo \#\#\# Create USB Installer \#\#\#
-	echo 
-	echo Formatting disk disk"$usbDisk" to JHFS+ with GUID partition
-	echo table...
-    echo
-
-	diskutil partitionDisk /dev/disk"$usbDisk" GPT JHFS+ "$usbName" 100%
+	   checkMount "$usbMount"
+       
+	   # Reformat it to Journaled HFS+ with a GUID Partition Table
+       #clear
+	   #echo \#\#\# Create USB Installer \#\#\#
+       echo 
+	   echo Formatting disk disk"$usbDisk" to JHFS+ with GUID partition
+       echo table...
+       echo
+       diskutil partitionDisk /dev/disk"$usbDisk" GPT JHFS+ "$usbName" 100%
+    fi
 
 	# Run the createinstallmedia program
 	#clear
@@ -384,25 +417,29 @@ function eraseUSB () {
 	# Set up some info for later use
 	setDisk "$1"
 
-	# Unmount the USB drive
-	clear
-	echo \#\#\# Create USB Installer \#\#\#
-    echo Using createinstallmedia
-	echo 
-	echo Unmounting "$usbName"...
-	echo 
+    if [[ "$eraseFirst" == "Yes" ]]; then
+	   # Unmount the USB drive
+	   clear
+	   echo \#\#\# Create USB Installer \#\#\#
+        echo Using createinstallmedia
+	   echo 
+    
+	   echo Unmounting "$usbName"...
+	   echo 
 
-	checkMount "$usbMount"
+	   checkMount "$usbMount"
 
-	# Reformat it to Journaled HFS+ with a GUID Partition Table
-	clear
-	echo \#\#\# Create USB Installer \#\#\#
-    echo Using createinstallmedia
-	echo 
-	echo Formatting disk disk"$usbDisk" to JHFS+ with GUID partition
-	echo table...
+	   # Reformat it to Journaled HFS+ with a GUID Partition Table
+	   clear
+	   echo \#\#\# Create USB Installer \#\#\#
+       echo Using createinstallmedia
+	   echo 
+	   echo Formatting disk disk"$usbDisk" to JHFS+ with GUID partition
+       echo table...
 
-	diskutil partitionDisk /dev/disk"$usbDisk" GPT JHFS+ "$usbName" 100%
+	   diskutil partitionDisk /dev/disk"$usbDisk" GPT JHFS+ "$usbName" 100%
+       
+    fi
 
 	# Run the createinstallmedia program
 	clear
@@ -727,7 +764,7 @@ function diskInfo () {
 if [[ "$1" == "USB" ]]; then
 	createUSB
 elif [[ "$1" == "USBESD" ]]; then
-	createUSBESD
+    createUSBESD
 else
 	displayWarning
 fi
