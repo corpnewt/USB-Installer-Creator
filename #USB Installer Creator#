@@ -28,10 +28,6 @@ installerName="Install OS X/macOS.app"
 scriptName="Create USB Installer"
 scriptMessage="Select your USB drive:"
 
-# Allow creation without erasing the drive first
-eraseFirst="Yes"
-# Allow the use of *just* the InstallESD.dmg
-
 function resetVars () {
 	usbName=""
 	usbMount=""
@@ -105,7 +101,6 @@ function mainMenu () {
 	echo 2. Create With asr \(older way\)
 	echo 
 	echo ?. Help
-    echo E. Erase the USB [Currently: "$eraseFirst"]
 	echo 
 	echo Q. Quit
 	echo 
@@ -119,21 +114,10 @@ function mainMenu () {
 		createUSBESD
 	elif [[ "$menuChoice" == "q" ]]; then
 		customQuit
-    elif [[ "$menuChoice" == "e" ]]; then
-		toggleErase
 	elif [[ "$menuChoice" == "?" ]]; then
 		mainHelp
 	fi
 	mainMenu
-}
-
-function toggleErase () {
-    if [[ "$eraseFirst" == "Yes" ]]; then
-        eraseFirst="No"
-    else
-        eraseFirst="Yes"
-    fi
-    return 0
 }
 
 function trimWhitespace () {
@@ -163,11 +147,6 @@ function mainHelp () {
     echo version of OSX/macOS, meaning this is a viable
     echo solution for anyone running a pre-10.9 OS and
     echo trying to build a newer install USB.
-	echo 
-    echo E. Erase the USB - this allows you to toggle
-    echo whether or not to re-partition the USB prior to
-    echo continuing with the setup.  Helpful for those who
-    echo need to use the MBR partition table.
     echo
 	read -p "Press [enter] to return to the main menu..."
 
@@ -245,13 +224,14 @@ function eraseUSBESD () {
 	# Set up some info for later use
 	setDisk "$1"
 
+    checkErase
+
 	# Unmount the USB drive
 	clear
 	echo \#\#\# Create USB Installer \#\#\#
 	echo 
     
-    
-    if [[ "$eraseFirst" == "Yes" ]]; then
+    if [[ "$?" == "1" ]]; then
 	   echo Unmounting "$usbName"...
        echo 
 
@@ -285,7 +265,7 @@ function eraseUSBESD () {
 
     if [ ! -e "$insESDMount/BaseSystem.dmg" ]; then
 	   echo InstallESD.dmg is missing files...
-	   hdiutil unmount -force "$insESDIdent"
+	   checkMount "$insESDIdent"
        echo 
 	   exit
     fi
@@ -323,7 +303,7 @@ function eraseUSBESD () {
 	echo 
     echo Unmounting OS X Base System...
     echo
-    hdiutil eject -force "$insBaseSystemIdent"
+    checkMount "$insBaseSystemIdent"
     echo
     
     echo 
@@ -345,7 +325,7 @@ function eraseUSBESD () {
  
     echo Unmounting OS X Install ESD...
     echo
-    hdiutil eject -force "$insESDIdent"
+    checkMount "$insESDIdent"
 
 	#Get disk info again since the volume name is most likely
 	#different than before...
@@ -420,30 +400,31 @@ function createUSB () {
 
 function eraseUSB () {
 	# Set up some info for later use
-	setDisk "$1"
-
-    if [[ "$eraseFirst" == "Yes" ]]; then
-	   # Unmount the USB drive
-	   clear
-	   echo \#\#\# Create USB Installer \#\#\#
-        echo Using createinstallmedia
-	   echo 
+    setDisk "$1"
     
-	   echo Unmounting "$usbName"...
-	   echo 
+    checkErase
+    if [[ "$?" == "1" ]]; then
+        # Erase the disk
+        # Unmount the USB drive
+        clear
+        echo \#\#\# Create USB Installer \#\#\#
+        echo Using createinstallmedia
+        echo 
+    
+        echo Unmounting "$usbName"...
+        echo 
 
-	   checkMount "$usbMount"
+        checkMount "$usbIdent"
 
-	   # Reformat it to Journaled HFS+ with a GUID Partition Table
-	   clear
-	   echo \#\#\# Create USB Installer \#\#\#
-       echo Using createinstallmedia
-	   echo 
-	   echo Formatting disk disk"$usbDisk" to JHFS+ with GUID partition
-       echo table...
+        # Reformat it to Journaled HFS+ with a GUID Partition Table
+        clear
+        echo \#\#\# Create USB Installer \#\#\#
+        echo Using createinstallmedia
+        echo 
+        echo Formatting disk disk"$usbDisk" to JHFS+ with GUID partition
+        echo table...
 
-	   diskutil partitionDisk /dev/disk"$usbDisk" GPT JHFS+ "$usbName" 100%
-       
+        diskutil partitionDisk /dev/disk"$usbDisk" GPT JHFS+ "$usbName" 100%
     fi
 
 	# Run the createinstallmedia program
@@ -480,6 +461,30 @@ function eraseUSB () {
     mainMenu
 }
 
+function checkErase () {
+    clear
+    echo \#\#\# Check Erase \#\#\#
+    echo
+    echo Do you want to erase and repartition the USB disk
+    echo first?  This will set up the USB disk with the
+    echo following:
+    echo
+    echo Single Partition - OS X Extensded \(Journaled\)
+    echo GUID Partition Table
+    echo
+    echo Erase? \(y/n\):
+    echo
+    read toErase
+    
+    if [[ "$toErase" == "y" ]]; then
+        return 1
+    elif [[ "$toErase" == "n" ]]; then
+        return 0
+    fi
+    
+    checkErase
+}
+
 function checkMount () {
 	#echo Checking mount status...
 	# We SHOULD only ever get here after confirming we have a valid disk
@@ -494,7 +499,6 @@ function unmount () {
 	#echo Unmounting Disk...
 	hdiutil unmount -force "$( getDiskMountPoint "$1" )"
 	checkMount "$1"
-
 }
 
 function checkRoot () {
@@ -551,8 +555,9 @@ function pickDisk () {
     read drive
 
     if [[ "$drive" == "" ]]; then
-        drive="/"
+        #drive="/"
         #pickDrive
+        pickDisk "$1" "$2" "$3"
     fi
     
     #Notice - must have the single brackets or this
