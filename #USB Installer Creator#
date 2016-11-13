@@ -1,0 +1,750 @@
+#!/bin/bash
+
+DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd)"
+
+# Turn on case-insensitive matching
+shopt -s nocasematch
+# turn on extended globbing
+shopt -s extglob
+
+usbName=""
+usbMount=""
+usbIdent=""
+usbDisk=""
+usbPart=""
+
+insMED=""
+insDir=""
+
+insESD=""
+insESDMount=""
+insESDIdent=""
+insBaseSystem=""
+insBaseSystemMount=""
+insBaseSystemIdent=""
+
+installerName="Install OS X/macOS.app"
+
+function resetVars () {
+	usbName=""
+	usbMount=""
+	usbIdent=""
+	usbDisk=""
+	usbPart=""
+
+	insMED=""
+	insDir=""
+    
+    insESD=""
+    insESDMount=""
+    insESDIdent=""
+    insBaseSystem=""
+    insBaseSystemMount=""
+    insBaseSystemIdent=""
+}
+
+function setDisk () {
+	usbName="$( getDiskName "$1" )"
+	usbMount="$( getDiskMountPoint "$1" )"
+	usbIdent="$( getDiskIdentifier "$1" )"
+	usbDisk="$( getDiskNumber "$1" )"
+	usbPart="$( getPartitionNumber "$1" )"
+}
+
+function displayWarning () {
+	clear
+	echo \#\#\# WARNING \#\#\#
+	echo 
+	echo This script is provided with NO WARRANTY whatsoever.
+	echo I am not responsible for ANY problems or issues you
+	echo may encounter, or any damages as a result of running
+	echo this script.
+	echo 
+	echo To ACCEPT this warning and FULL RESPONSIBILITY for
+	echo using this script, press [enter].
+	echo 
+	read -p "To REFUSE, close this script."
+	mainMenu
+	
+
+}
+
+function customQuit () {
+	clear
+	echo \#\#\# USB Installer Creator \#\#\#
+	echo by CorpNewt
+	echo 
+	echo Thanks for testing it out, for bugs/comments/complaints
+	echo send me a message on Reddit, or check out my GitHub:
+	echo 
+	echo www.reddit.com/u/corpnewt
+	echo www.github.com/corpnewt
+	echo 
+	echo Have a nice day/night!
+	echo 
+	echo 
+	shopt -u extglob
+	shopt -u nocasematch
+	exit $?
+}
+
+function mainMenu () {
+	resetVars
+	# Main Menu
+	clear
+	echo \#\#\# USB Installer Creator \#\#\#
+	echo 
+	echo 1. Create With createinstallmedia
+	echo 2. Create With asr \(older way\)
+	echo 
+	echo ?. Help
+	echo 
+	echo Q. Quit
+	echo 
+	echo Please select a task:
+	echo 
+	read menuChoice
+
+	if [[ "$menuChoice" == "1" ]]; then
+		createUSB
+	elif [[ "$menuChoice" == "2" ]]; then
+		createUSBESD
+	elif [[ "$menuChoice" == "q" ]]; then
+		customQuit
+	elif [[ "$menuChoice" == "?" ]]; then
+		mainHelp
+	fi
+	mainMenu
+}
+
+function trimWhitespace () {
+	# Trim leading and trailing whitespace
+    local var=$1
+    var=${var##+([[:space:]])}
+    var=${var%%+([[:space:]])}
+    echo -n "$var"
+}
+
+function mainHelp () {
+	# Give some info on the main menu options.
+	clear
+	echo \#\#\# Main Menu Help \#\#\#
+	echo 
+	echo 1. Create With createinstallmedia - this uses the
+    echo "createinstallmedia" binary located inside the
+    echo OSX/macOS install application to build the USB.
+    echo It is only available in OS 10.9+ installers - it\'s
+    echo also worth noting that you can only run that binary
+    echo on a machine running 10.9+ or it will fail.
+	echo 
+	echo 2. Create With asr \(older way\) - this uses asr
+    echo \(Apple Software Restore\) to build the USB.  This
+    echo method should be capable of building installers for
+    echo 10.7+ - the asr command should be available on any
+    echo version of OSX/macOS, meaning this is a viable
+    echo solution for anyone running a pre-10.9 OS and
+    echo trying to build a newer install USB.
+	echo 
+	read -p "Press [enter] to display options 4-5..."
+
+	mainMenu
+}
+
+function createUSBESD () {
+    checkRoot "USBESD"
+    clear
+    echo \#\#\# Create USB Installer \#\#\#
+	echo Using ASR \(Apple Software Restore\)
+    echo
+	echo Warning!
+	echo 
+	echo Please make sure you have connected an 8GB+ \(16GB recommended\)
+	echo USB flash drive and a copy of the \"$installerName\" application to 
+	echo continue!
+	echo 
+	echo This script tested ONLY with Mac OS X 10.9+
+	echo 
+	echo 
+	read -p "Press [enter] to continue..."
+
+	clear
+
+	echo Please drag and drop the \"$installerName\" application
+	echo here or type the path:
+	echo 
+	echo 
+	read insDir
+    
+    if [ "$insDir" == "" ]; then
+		createUSBESD
+        return 0
+	fi
+
+	if [ ! -e "$insDir/Contents/SharedSupport/InstallESD.dmg" ]; then
+		clear
+		echo Required files were missing in the installer.
+		echo 
+		echo "$insDir/Contents/SharedSupport/InstallESD.dmg"
+		echo Does not exist.
+		echo 
+		exit
+	fi
+
+	insESD="$insDir/Contents/SharedSupport/InstallESD.dmg"
+    
+    clear
+	echo \#\#\# Create USB Installer \#\#\#
+    echo Using ASR \(Apple Software Restore\)
+	echo 
+	echo Please drag and drop \(or type the name\) the USB drive you would
+	echo like to use as the installer:
+	echo NOTE!  The USB drive will be erased and all files deleted!
+	echo 
+	ls /volumes/
+	echo 
+	echo 
+	read usb
+
+	if [[ "$( isDisk "$usb" )" != "0" ]]; then
+		if [[ "$( volumeName "$usb" )" ]]; then
+			# We have the path to the mount point
+			eraseUSBESD "$( volumeName "$usb" )"
+		else
+			# No disk available there
+			clear
+			echo \#\#\# Create USB Installer \#\#\#
+            echo Using ASR \(Apple Software Restore\)
+			echo 
+			echo \""$usb"\" is not a valid disk name, identifier
+			echo or mount point.
+			echo 
+			read -p "Press [enter] to return to the main menu..."
+			mainMenu
+		fi
+	else
+		# Valid disk
+		eraseUSBESD "$usb"
+	fi
+
+}
+
+function eraseUSBESD () {
+	# Set up some info for later use
+	setDisk "$1"
+
+	# Unmount the USB drive
+	clear
+	echo \#\#\# Create USB Installer \#\#\#
+	echo 
+	echo Unmounting "$usbName"...
+	echo 
+
+	checkMount "$usbMount"
+
+	# Reformat it to Journaled HFS+ with a GUID Partition Table
+	#clear
+	#echo \#\#\# Create USB Installer \#\#\#
+	echo 
+	echo Formatting disk disk"$usbDisk" to JHFS+ with GUID partition
+	echo table...
+    echo
+
+	diskutil partitionDisk /dev/disk"$usbDisk" GPT JHFS+ "$usbName" 100%
+
+	# Run the createinstallmedia program
+	#clear
+	#echo \#\#\# Create USB Installer \#\#\#
+	echo 
+	echo Creating Installer \(This will take awhile\)...
+	echo 
+	# echo "$insMED" --volume "$usbMount" --applicationpath "$insDir" --no interaction
+    #echo hdiutil attach -noverify -nobrowse "$insESD"
+	#echo 
+    
+    # Get the dmg mount point and identifier - ident is so much more helpful
+    insESDIdent="$( mountDiskImage "$insESD" )"
+    insESDMount="$( getDiskMountPoint "$insESDIdent" )"
+
+	# "$insMED" --volume "$usbMount" --applicationpath "$insDir" --no interaction
+
+    if [ ! -e "$insESDMount/BaseSystem.dmg" ]; then
+	   echo InstallESD.dmg is missing files...
+	   hdiutil unmount -force "$insESDIdent"
+       echo 
+	   exit
+    fi
+    
+    echo 
+    echo Attaching BaseSystem.dmg...
+    echo
+    
+    # Get the dmg mount point and identifier - ident is so much more helpful
+    insBaseSystemIdent="$( mountDiskImage "$insESDMount/BaseSystem.dmg" )"
+    insBaseSystemMount="$( getDiskMountPoint "$insBaseSystemIdent" )"
+
+    echo 
+    echo Restoring OS X Base System to "$usbName"...
+    echo
+    #cp -R -p "$insBaseSystemMount/" "$usbMount"
+    asr -source "$insBaseSystemMount" -target "$usbMount" -erase -noprompt
+    
+    echo
+    
+    #Get disk info again since the volume name is most likely
+	#different than before...
+
+	local newName="$( getDiskName "$usbIdent" )"
+	if [[ "$newName" != "$usbName" ]]; then
+		echo \""$usbName"\" has been changed to \""$newName"\"...
+        echo
+        echo Renaming back to \""$usbName"\"...
+        echo
+        diskutil rename $usbIdent "$usbName"
+		# usbName="$newName"
+		echo 
+	fi
+
+	echo 
+    echo Unmounting OS X Base System...
+    echo
+    hdiutil eject -force "$insBaseSystemIdent"
+    echo
+    
+    echo 
+    echo Copying Packages from OS X Base System...
+    echo
+    rm -Rf "$usbMount/System/Installation/Packages"
+    cp -R -p "$insESDMount/Packages/" "$usbMount/System/Installation/Packages/"
+    echo
+    echo Copying BaseSystem.chunklist to "$usbName"...
+    echo
+    cp -R -p "$insESDMount/BaseSystem.chunklist" "$usbMount/BaseSystem.chunklist"
+    
+    echo 
+    echo Copying BaseSystem.dmg to "$usbName"...
+    echo
+    cp -R -p "$insESDMount/BaseSystem.dmg" "$usbMount/BaseSystem.dmg"
+    echo
+    
+ 
+    echo Unmounting OS X Install ESD...
+    echo
+    hdiutil eject -force "$insESDIdent"
+
+	#Get disk info again since the volume name is most likely
+	#different than before...
+    
+    echo
+    echo Done.
+    echo
+    
+	sleep 3
+	checkAuto
+}
+
+function mountDiskImage () {
+	# This function mounts the passed disk image, and
+    # returns the mount point
+	local __imagePath=$1
+    
+    # Old way got mount point - this way gets the identifier
+    # echo "/Volumes/$( hdiutil attach -noverify -nobrowse "$__imagePath" | grep -i "/Volumes/" | cut -d / -f 5 )"
+    echo "$( hdiutil attach -noverify -nobrowse "$__imagePath" | grep -i "/dev/disk" | tail -f -n 1 | cut -d ' ' -f 1 | cut -d '/' -f 3)"
+}
+
+function createUSB () {
+	checkRoot "USB"
+	clear
+	echo \#\#\# Create USB Installer \#\#\#
+    echo Using createinstallmedia
+	echo 
+	echo Warning!
+	echo 
+	echo Please make sure you have connected an 8GB+ \(16GB recommended\)
+	echo USB flash drive and a copy of the \"$installerName\" application to 
+	echo continue!
+	echo 
+	echo This script works ONLY with Mac OS X 10.9+
+	echo 
+	echo 
+	read -p "Press [enter] to continue..."
+
+	clear
+
+	echo Please drag and drop the \"$installerName\" application
+	echo here or type the path:
+	echo 
+	echo 
+	read insDir
+
+	if [ "$insDir" == "" ]; then
+		createUSB
+        return 0
+	fi
+
+	if [ ! -e "$insDir/Contents/Resources/createinstallmedia" ]; then
+		clear
+		echo Required files were missing in the installer.
+		echo 
+		echo "$insDir/Contents/Resources/createinstallmedia"
+		echo Does not exist.
+		echo 
+		exit
+	fi
+
+	insMED="$insDir/Contents/Resources/createinstallmedia"
+
+	clear
+	echo \#\#\# Create USB Installer \#\#\#
+    echo Using createinstallmedia
+	echo 
+	echo Please drag and drop \(or type the name\) the USB drive you would
+	echo like to use as the installer:
+	echo NOTE!  The USB drive will be erased and all files deleted!
+	echo 
+	ls /volumes/
+	echo 
+	echo 
+	read usb
+
+	if [[ "$( isDisk "$usb" )" != "0" ]]; then
+		if [[ "$( volumeName "$usb" )" ]]; then
+			# We have the path to the mount point
+			eraseUSB "$( volumeName "$usb" )"
+		else
+			# No disk available there
+			clear
+			echo \#\#\# Create USB Installer \#\#\#
+            echo Using createinstallmedia
+			echo 
+			echo \""$usb"\" is not a valid disk name, identifier
+			echo or mount point.
+			echo 
+			read -p "Press [enter] to return to the main menu..."
+			mainMenu
+		fi
+	else
+		# Valid disk
+		eraseUSB "$usb"
+	fi
+
+}
+
+function eraseUSB () {
+	# Set up some info for later use
+	setDisk "$1"
+
+	# Unmount the USB drive
+	clear
+	echo \#\#\# Create USB Installer \#\#\#
+    echo Using createinstallmedia
+	echo 
+	echo Unmounting "$usbName"...
+	echo 
+
+	checkMount "$usbMount"
+
+	# Reformat it to Journaled HFS+ with a GUID Partition Table
+	clear
+	echo \#\#\# Create USB Installer \#\#\#
+    echo Using createinstallmedia
+	echo 
+	echo Formatting disk disk"$usbDisk" to JHFS+ with GUID partition
+	echo table...
+
+	diskutil partitionDisk /dev/disk"$usbDisk" GPT JHFS+ "$usbName" 100%
+
+	# Run the createinstallmedia program
+	clear
+	echo \#\#\# Create USB Installer \#\#\#
+    echo Using createinstallmedia
+	echo 
+	echo Creating Installer \(This will take awhile\)...
+	echo 
+	echo "$insMED" --volume "$usbMount" --applicationpath "$insDir" --no interaction
+	echo 
+
+	"$insMED" --volume "$usbMount" --applicationpath "$insDir" --no interaction
+
+
+	echo 
+
+	#Get disk info again since the volume name is most likely
+	#different than before...
+
+	local newName="$( getDiskName "$usbIdent" )"
+	clear
+	echo \#\#\# Create USB Installer \#\#\#
+    echo Using createinstallmedia
+	echo 
+	if [[ "$newName" != "$usbName" ]]; then
+		echo \""$usbName"\" has been changed to \""$newName"\"...
+		usbName="$newName"
+		echo 
+	fi
+    echo Done.
+    echo
+	sleep 3
+	checkAuto
+}
+
+function checkMount () {
+	#echo Checking mount status...
+	# We SHOULD only ever get here after confirming we have a valid disk
+	if [ "$( getDiskMounted "$1" )" == "Yes" ]; then
+		echo "$( getDiskName "$1" )" is still mounted.  Unmounting...
+		unmount "$1"
+	fi
+}
+
+function unmount () {
+	#repeats to unmount a stuck disk
+	#echo Unmounting Disk...
+	hdiutil unmount -force "$( getDiskMountPoint "$1" )"
+	checkMount "$1"
+
+}
+
+function diskPrompt () {
+	# This will prompt us for a target disk, then load up
+	# the usbXXXX variables with the appropriate info and
+	# return 0 on succes, and 1 on failure.
+	clear
+	echo \#\#\# Select Disk \#\#\#
+	echo 
+	echo Please drag and drop \(or type the name\) the disk you would
+	echo like to select:
+	echo 
+	ls /volumes/
+	echo 
+	echo 
+	read usb
+
+	if [[ "$( isDisk "$usb" )" != "0" ]]; then
+		if [[ "$( volumeName "$usb" )" ]]; then
+			# We have a valid disk
+			usb="$( volumeName "$usb" )"
+			setDisk "$usb"
+		else
+			# No disk available there
+			clear
+			echo \#\#\# Select Disk \#\#\#
+			echo 
+			echo \""$usb"\" is not a valid disk name, identifier
+			echo or mount point.
+			echo 
+			read -p "Press [enter] to return to the main menu..."
+			mainMenu
+		fi
+	else
+		# Valid disk
+		setDisk "$usb"
+	fi
+
+}
+
+function checkRoot () {
+	if [[ "$(whoami)" != "root" ]]; then
+		clear
+		echo This script requires root privileges.
+		echo Please enter your admin password to continue.
+		echo 
+		sudo "$0" "$1" "$installerName" "$installerVersion"
+		exit $?
+	fi
+
+}
+
+###################################################
+###               Disk Functions                ###
+###################################################
+
+
+function isDisk () {
+	# This function checks our passed variable
+	# to see if it is a disk
+	# Accepts mount point, diskXsX and an empty variable
+	# If empty, defaults to "/"
+	local __disk=$1
+	if [[ "$__disk" == "" ]]; then
+		__disk="/"
+	fi
+	# Here we run diskutil info on our __disk and see what the
+	# exit code is.  If it's "0", we're good.
+	diskutil info "$__disk" &>/dev/null
+	# Return the diskutil exit code
+	echo $?
+}
+
+function volumeName () {
+	# This is a last-resort function to check if maybe
+	# Just the name of a volume was passed.
+	local __disk=$1
+	if [[ ! -d "$__disk" ]]; then
+		if [ -d "/volumes/$__disk" ]; then
+			#It was just volume name
+			echo "/Volumes/$__disk"
+		fi
+	else
+		echo "$__disk"
+	fi
+}
+
+function getDiskMounted () {
+	local __disk=$1
+	# If variable is empty, set it to "/"
+	if [[ "$__disk" == "" ]]; then
+		__disk="/"
+	fi
+	# Output the "Volume Name" of __disk
+	echo "$( diskutil info "$__disk" | grep 'Mounted' | cut -d : -f 2 | sed 's/^ *//g' | sed 's/ *$//g' )"
+}
+
+function getDiskName () {
+	local __disk=$1
+	# If variable is empty, set it to "/"
+	if [[ "$__disk" == "" ]]; then
+		__disk="/"
+	fi
+	# Output the "Volume Name" of __disk
+	echo "$( diskutil info "$__disk" | grep 'Volume Name' | cut -d : -f 2 | sed 's/^ *//g' | sed 's/ *$//g' )"
+}
+
+function getDiskMountPoint () {
+	local __disk=$1
+	# If variable is empty, set it to "/"
+	if [[ "$__disk" == "" ]]; then
+		__disk="/"
+	fi
+	# Output the "Mount Point" of __disk
+	echo "$( diskutil info "$__disk" | grep 'Mount Point' | cut -d : -f 2 | sed 's/^ *//g' | sed 's/ *$//g' )"
+}
+
+function getDiskIdentifier () {
+	local __disk=$1
+	# If variable is empty, set it to "/"
+	if [[ "$__disk" == "" ]]; then
+		__disk="/"
+	fi
+	# Output the "Mount Point" of __disk
+	echo "$( diskutil info "$__disk" | grep 'Device Identifier' | cut -d : -f 2 | sed 's/^ *//g' | sed 's/ *$//g' )"
+}
+
+function getDiskNumbers () {
+	local __disk=$1
+	# If variable is empty, set it to "/"
+	if [[ "$__disk" == "" ]]; then
+		__disk="/"
+	fi
+	# Output the "Device Identifier" of __disk
+	# If our disk is "disk0s1", it would output "0s1"
+	echo "$( getDiskIdentifier "$__disk" | cut -d k -f 2 )"
+}
+
+function getDiskNumber () {
+	local __disk=$1
+	# If variable is empty, set it to "/"
+	if [[ "$__disk" == "" ]]; then
+		__disk="/"
+	fi
+	# Get __disk identifier numbers
+	local __diskNumbers="$( getDiskNumbers "$__disk" )"
+	# return the first number
+	echo "$( echo "$__diskNumbers" | cut -d s -f 1 )"
+}
+
+function getPartitionNumber () {
+	local __disk=$1
+	# If variable is empty, set it to "/"
+	if [[ "$__disk" == "" ]]; then
+		__disk="/"
+	fi
+	# Get __disk identifier numbers
+	local __diskNumbers="$( getDiskNumbers "$__disk" )"
+	# return the second number
+	echo "$( echo "$__diskNumbers" | cut -d s -f 2 )"	
+}
+
+function getPartitionType () {
+	local __disk=$1
+	# If variable is empty, set it to "/"
+	if [[ "$__disk" == "" ]]; then
+		__disk="/"
+	fi
+	# Output the "Volume Name" of __disk
+	echo "$( diskutil info "$__disk" | grep 'Partition Type' | cut -d : -f 2 | sed 's/^ *//g' | sed 's/ *$//g' )"
+}
+
+function getEFIIdentifier () {
+	local __disk=$1
+	local __diskName="$( getDiskName "$__disk" )"
+	local __diskNum="$( getDiskNumber "$__disk" )"
+	# If variable is empty, set it to "/"
+	if [[ "$__disk" == "" ]]; then
+		__disk="/"
+	fi
+	# Output the "Device Identifier" for the EFI partition of __disk
+	endOfDisk="0"
+	i=1
+	while [[ "$endOfDisk" == "0" ]]; do
+		# Iterate through all partitions of the disk, and return those that
+		# are EFI
+		local __currentDisk=disk"$__diskNum"s"$i"
+		# Check if it's a valid disk, and if not, exit the loop
+		if [[ "$( isDisk "$__currentDisk" )" != "0" ]]; then
+			endOfDisk="true"
+			continue
+		fi
+
+		local __currentDiskType="$( getPartitionType "$__currentDisk" )"
+
+		if [ "$__currentDiskType" == "EFI" ]; then
+			echo "$( getDiskIdentifier "$__currentDisk" )"
+		fi
+		i="$( expr $i + 1 )"
+	done	
+}
+
+function getUUID () {
+	local __disk=$1
+	# If variable is empty, set it to "/"
+	if [[ "$__disk" == "" ]]; then
+		__disk="/"
+	fi
+	# Output the "Disk / Partition UUID" of __disk
+	echo "$( diskutil info "$__disk" | grep 'Disk / Partition UUID' | cut -d : -f 2 | sed 's/^ *//g' | sed 's/ *$//g' )"
+}
+
+function diskInfo () {
+	# Echoes some info on the passed disk
+	if [[ "$( isDisk "$1" )" == "0" ]]; then
+		echo Is Disk: YES
+		echo Disk Name: "$( getDiskName "$1" )"
+		echo Mount Point: "$( getDiskMountPoint "$1" )"
+		echo Disk Identifier: "$( getDiskIdentifier "$1" )"
+		echo Disk Numbers: "$( getDiskNumbers "$1" )"
+		echo Disk Number: "$( getDiskNumber "$1" )"
+		echo Partition Number: "$( getPartitionNumber "$1" )"
+	else
+		echo Is Disk: NO
+	fi
+
+}
+
+
+########################################
+###           Script Start           ###
+########################################
+
+# Check if we restarted due to needing sudo permissions
+# and go from there...
+
+if [[ "$1" == "USB" ]]; then
+	createUSB
+elif [[ "$1" == "USBESD" ]]; then
+    createUSBESD
+else
+	displayWarning
+fi
+
+exit
