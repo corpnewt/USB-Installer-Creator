@@ -164,7 +164,12 @@ function mainHelp () {
     echo solution for anyone running a pre-10.9 OS and
     echo trying to build a newer install USB.
 	echo 
-	read -p "Press [enter] to display options 4-5..."
+    echo E. Erase the USB - this allows you to toggle
+    echo whether or not to re-partition the USB prior to
+    echo continuing with the setup.  Helpful for those who
+    echo need to use the MBR partition table.
+    echo
+	read -p "Press [enter] to return to the main menu..."
 
 	mainMenu
 }
