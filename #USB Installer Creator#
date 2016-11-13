@@ -25,6 +25,12 @@ insBaseSystemIdent=""
 
 installerName="Install OS X/macOS.app"
 
+scriptName="Create USB Installer"
+scriptMessage="Select your USB drive:"
+
+# Allow creation without erasing the drive first
+# Allow the use of *just* the InstallESD.dmg
+
 function resetVars () {
 	usbName=""
 	usbMount=""
@@ -193,38 +199,10 @@ function createUSBESD () {
 	insESD="$insDir/Contents/SharedSupport/InstallESD.dmg"
     
     clear
-	echo \#\#\# Create USB Installer \#\#\#
-    echo Using ASR \(Apple Software Restore\)
-	echo 
-	echo Please drag and drop \(or type the name\) the USB drive you would
-	echo like to use as the installer:
-	echo NOTE!  The USB drive will be erased and all files deleted!
-	echo 
-	ls /volumes/
-	echo 
-	echo 
-	read usb
+	
+    pickDisk usb "$scriptName" "Please drag and drop (or type the name) the USB drive you would like to use as the installer:"
 
-	if [[ "$( isDisk "$usb" )" != "0" ]]; then
-		if [[ "$( volumeName "$usb" )" ]]; then
-			# We have the path to the mount point
-			eraseUSBESD "$( volumeName "$usb" )"
-		else
-			# No disk available there
-			clear
-			echo \#\#\# Create USB Installer \#\#\#
-            echo Using ASR \(Apple Software Restore\)
-			echo 
-			echo \""$usb"\" is not a valid disk name, identifier
-			echo or mount point.
-			echo 
-			read -p "Press [enter] to return to the main menu..."
-			mainMenu
-		fi
-	else
-		# Valid disk
-		eraseUSBESD "$usb"
-	fi
+    eraseUSBESD "$usb"
 
 }
 
@@ -339,7 +317,7 @@ function eraseUSBESD () {
     echo
     
 	sleep 3
-	checkAuto
+	mainMenu
 }
 
 function mountDiskImage () {
@@ -395,38 +373,10 @@ function createUSB () {
 	insMED="$insDir/Contents/Resources/createinstallmedia"
 
 	clear
-	echo \#\#\# Create USB Installer \#\#\#
-    echo Using createinstallmedia
-	echo 
-	echo Please drag and drop \(or type the name\) the USB drive you would
-	echo like to use as the installer:
-	echo NOTE!  The USB drive will be erased and all files deleted!
-	echo 
-	ls /volumes/
-	echo 
-	echo 
-	read usb
+    
+    pickDisk usb "$scriptName" "Please drag and drop (or type the name) the USB drive you would like to use as the installer:"
 
-	if [[ "$( isDisk "$usb" )" != "0" ]]; then
-		if [[ "$( volumeName "$usb" )" ]]; then
-			# We have the path to the mount point
-			eraseUSB "$( volumeName "$usb" )"
-		else
-			# No disk available there
-			clear
-			echo \#\#\# Create USB Installer \#\#\#
-            echo Using createinstallmedia
-			echo 
-			echo \""$usb"\" is not a valid disk name, identifier
-			echo or mount point.
-			echo 
-			read -p "Press [enter] to return to the main menu..."
-			mainMenu
-		fi
-	else
-		# Valid disk
-		eraseUSB "$usb"
-	fi
+    eraseUSB "$usb"
 
 }
 
@@ -478,14 +428,14 @@ function eraseUSB () {
     echo Using createinstallmedia
 	echo 
 	if [[ "$newName" != "$usbName" ]]; then
-		echo \""$usbName"\" has been changed to \""$newName"\"...
+		echo \""$usbName"\" has been renamed to \""$newName"\"...
 		usbName="$newName"
 		echo 
 	fi
     echo Done.
     echo
 	sleep 3
-	checkAuto
+    mainMenu
 }
 
 function checkMount () {
@@ -505,44 +455,6 @@ function unmount () {
 
 }
 
-function diskPrompt () {
-	# This will prompt us for a target disk, then load up
-	# the usbXXXX variables with the appropriate info and
-	# return 0 on succes, and 1 on failure.
-	clear
-	echo \#\#\# Select Disk \#\#\#
-	echo 
-	echo Please drag and drop \(or type the name\) the disk you would
-	echo like to select:
-	echo 
-	ls /volumes/
-	echo 
-	echo 
-	read usb
-
-	if [[ "$( isDisk "$usb" )" != "0" ]]; then
-		if [[ "$( volumeName "$usb" )" ]]; then
-			# We have a valid disk
-			usb="$( volumeName "$usb" )"
-			setDisk "$usb"
-		else
-			# No disk available there
-			clear
-			echo \#\#\# Select Disk \#\#\#
-			echo 
-			echo \""$usb"\" is not a valid disk name, identifier
-			echo or mount point.
-			echo 
-			read -p "Press [enter] to return to the main menu..."
-			mainMenu
-		fi
-	else
-		# Valid disk
-		setDisk "$usb"
-	fi
-
-}
-
 function checkRoot () {
 	if [[ "$(whoami)" != "root" ]]; then
 		clear
@@ -559,6 +471,79 @@ function checkRoot () {
 ###               Disk Functions                ###
 ###################################################
 
+function pickDisk () { 
+    #$1 = callback drive picked
+    #$2 = title
+    #$3 = prompt
+
+
+    local __returnVar="$1"
+    local __scriptName="$2"
+    local __message="$3"
+
+    clear
+    echo \#\#\# "$__scriptName" \#\#\#
+    echo
+    echo "$__message"
+    echo 
+    
+    local driveList="$( cd /Volumes/; ls -1 | grep "^[^.]" )"
+    unset driveArray
+    IFS=$'\n' read -rd '' -a driveArray <<<"$driveList"
+    
+    #driveCount="${#driveArray[@]}"
+    local driveCount=0
+    local driveIndex=0
+    
+    for aDrive in "${driveArray[@]}"
+    do
+        (( driveCount++ ))
+        echo "$driveCount". "$aDrive"
+    done
+    
+    driveIndex=$(( driveCount-1 ))
+    
+    #ls /volumes/
+    echo 
+    echo 
+    read drive
+
+    if [[ "$drive" == "" ]]; then
+        drive="/"
+        #pickDrive
+    fi
+    
+    #Notice - must have the single brackets or this
+    #won't accurately tell if $drive is a number.
+    if [ "$drive" -eq "$drive" ] 2>/dev/null; then
+        #We have a number - check if it's in the array
+        if [  "$drive" -le "$driveCount" ] && [  "$drive" -gt "0" ]; then
+            drive="${driveArray[ (( $drive-1 )) ]}"
+        else
+            echo Index "$drive" out of range, checking for drive name...
+        fi
+    fi
+    
+    if [[ "$( isDisk "$drive" )" != "0" ]]; then
+        if [[ "$( volumeName "$drive" )" ]]; then
+			# We have a valid disk
+			drive="$( volumeName "$drive" )"
+			#setDisk "$drive"
+		else
+			# No disk available there
+			echo \""$drive"\" is not a valid disk name, identifier
+			echo or mount point.
+			echo 
+			read -p "Press [enter] to return to drive selection..."
+			pickDisk "$1" "$2" "$3"
+		fi
+    fi
+
+    # We have a valid drive - return it's diskIdent
+    
+    eval $__returnVar="$( getDiskIdentifier "$drive" )"
+
+}
 
 function isDisk () {
 	# This function checks our passed variable
@@ -742,7 +727,7 @@ function diskInfo () {
 if [[ "$1" == "USB" ]]; then
 	createUSB
 elif [[ "$1" == "USBESD" ]]; then
-    createUSBESD
+	createUSBESD
 else
 	displayWarning
 fi
