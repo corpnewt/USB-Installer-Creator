@@ -469,7 +469,7 @@ function checkErase () {
     echo first?  This will set up the USB disk with the
     echo following:
     echo
-    echo Single Partition - OS X Extensded \(Journaled\)
+    echo Single Partition - OS X Extended \(Journaled\)
     echo GUID Partition Table
     echo
     echo Erase? \(y/n\):
