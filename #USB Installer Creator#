@@ -304,6 +304,7 @@ function eraseUSBESD () {
     echo Unmounting OS X Base System...
     echo
     checkMount "$insBaseSystemIdent"
+    eject "$insBaseSystemIdent"
     echo
     
     echo 
@@ -326,6 +327,7 @@ function eraseUSBESD () {
     echo Unmounting OS X Install ESD...
     echo
     checkMount "$insESDIdent"
+    eject "$insESDIdent"
 
 	#Get disk info again since the volume name is most likely
 	#different than before...
@@ -499,6 +501,11 @@ function unmount () {
 	#echo Unmounting Disk...
 	hdiutil unmount -force "$( getDiskMountPoint "$1" )"
 	checkMount "$1"
+}
+
+function eject () {
+    # ejects a disk - only runs once
+    hdiutil detach -force "disk$( getDiskNumber "$1" )"
 }
 
 function checkRoot () {
