@@ -454,7 +454,11 @@ function eraseUSB () {
 	echo 
 	if [[ "$newName" != "$usbName" ]]; then
 		echo \""$usbName"\" has been renamed to \""$newName"\"...
-		usbName="$newName"
+        echo
+        echo Renaming back to \""$usbName"\"...
+        echo
+        diskutil rename $usbIdent "$usbName"
+		# usbName="$newName"
 		echo 
 	fi
     echo Done.
