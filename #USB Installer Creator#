@@ -224,14 +224,14 @@ function eraseUSBESD () {
 	# Set up some info for later use
 	setDisk "$1"
 
-    checkErase
+    checkErase erase
 
 	# Unmount the USB drive
 	clear
 	echo \#\#\# Create USB Installer \#\#\#
 	echo 
     
-    if [[ "$?" == "1" ]]; then
+    if [[ "$erase" == "1" ]]; then
 	   echo Unmounting "$usbName"...
        echo 
 
@@ -404,8 +404,8 @@ function eraseUSB () {
 	# Set up some info for later use
     setDisk "$1"
     
-    checkErase
-    if [[ "$?" == "1" ]]; then
+    checkErase erase
+    if [[ "$erase" == "1" ]]; then
         # Erase the disk
         # Unmount the USB drive
         clear
@@ -483,12 +483,12 @@ function checkErase () {
     read toErase
     
     if [[ "$toErase" == "y" ]]; then
-        return 1
+        eval $1=1
     elif [[ "$toErase" == "n" ]]; then
-        return 0
+        eval $1=0
+    else
+        checkErase $1
     fi
-    
-    checkErase
 }
 
 function checkMount () {
