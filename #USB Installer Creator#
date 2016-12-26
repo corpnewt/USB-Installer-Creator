@@ -185,20 +185,20 @@ function createUSBESD () {
     
     esdCheck="$( basename "$insDir" )"
 
-    if [[ "$esdCheck" == "InstallESD.dmg" ]]; then
-        # We have an InstallESD.dmg - let's proceed accordingly
+    if [[ "$esdCheck" == *.dmg ]]; then
+        # We have a dmg - let's proceed accordingly
         if [ ! -e "$insDir" ]; then
             clear
             echo Required files were missing in the installer.
             echo 
-            echo "$insDir/Contents/SharedSupport/InstallESD.dmg"
+            echo "$insDir"
             echo Does not exist.
             echo 
             exit
         fi
         insESD="$insDir"
     else
-        # Not an InstallESD.dmg - let's check for one
+        # Not a dmg - let's check for one
         if [ ! -e "$insDir/Contents/SharedSupport/InstallESD.dmg" ]; then
             clear
             echo Required files were missing in the installer.
