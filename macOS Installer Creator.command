@@ -206,6 +206,8 @@ class CIM:
     def create_with_current(self):
         # Checks which method we're using, then validates the InstallESD.dmg
         esd = os.path.join(self.target_app, self.esd_loc, "InstallESD.dmg")
+        # Set a temp path to the same loc as InstallESD - just in case we're 10.14 or newer
+        bsy = os.path.join(self.target_app, self.esd_loc, "BaseSystem.dmg")
         cim = os.path.join(self.target_app, "Contents/Resources/createinstallmedia")
         # Validate some requirements
         if not os.path.exists(esd):
@@ -221,17 +223,40 @@ class CIM:
             print("Couldn't find createinstallmedia!\n")
             self.u.grab("Press [enter] to return...")
             return False
-        # Get the target os version
-        mounts = self.mount_dmg(esd, True)
-        b_system = s_loc = s_vers = None
-        for mount in mounts:
-            b_system = None
-            s_vers   = None
-            b_test = os.path.join(mount, "BaseSystem.dmg")
-            if not os.path.exists(b_test):
-                # Missing BaseSystem.dmg
-                continue
-            b_system = b_test
+        if not os.path.exists(bsy):
+            # We need to get the BaseSystem.dmg from *within* the InstallESD.dmg
+            mounts = self.mount_dmg(esd, True)
+            b_system = s_loc = s_vers = None
+            for mount in mounts:
+                b_system = None
+                s_vers   = None
+                b_test = os.path.join(mount, "BaseSystem.dmg")
+                if not os.path.exists(b_test):
+                    # Missing BaseSystem.dmg
+                    continue
+                b_system = b_test
+                b_mounts = self.mount_dmg(b_system, True)
+                for m in b_mounts:
+                    s_test = os.path.join(m, "System/Library/CoreServices/SystemVersion.plist")
+                    if not os.path.exists(s_test):
+                        continue
+                    # Found it - let's get the version from it
+                    try:
+                        plist_data = plist.readPlist(s_test)
+                        s_vers = plist_data["ProductVersion"]
+                        break
+                    except:
+                        s_vers = None
+                # Unmount the attempted BaseSystem mounts
+                self.unmount_dmg(b_mounts)
+                if b_system and s_vers:
+                    # Gotem!
+                    self.target_os = s_vers
+                    break
+            # Unmount the ESD dmg stuff
+            self.unmount_dmg(mounts)
+        else:
+            b_system = bsy
             b_mounts = self.mount_dmg(b_system, True)
             for m in b_mounts:
                 s_test = os.path.join(m, "System/Library/CoreServices/SystemVersion.plist")
@@ -240,18 +265,10 @@ class CIM:
                 # Found it - let's get the version from it
                 try:
                     plist_data = plist.readPlist(s_test)
-                    s_vers = plist_data["ProductVersion"]
+                    self.target_os = plist_data["ProductVersion"]
                     break
                 except:
-                    s_vers = None
-            # Unmount the attempted BaseSystem mounts
-            self.unmount_dmg(b_mounts)
-            if b_system and s_vers:
-                # Gotem!
-                self.target_os = s_vers
-                break
-        # Unmount the ESD dmg stuff
-        self.unmount_dmg(mounts)
+                    self.target_os = None
         if not b_system:
             self.u.head("Error!")
             print("")
@@ -356,6 +373,7 @@ class CIM:
         original_name = self.target_disk['name']
         self.u.head("Creating with CIM")
         print("")
+        print("This will take some time - sit back and relax for a bit.\n\n")
         # Let's setup our args
         cim_args = [x for x in self.v_default.get("cimargs", [])]
         for v in self.versions:
@@ -393,6 +411,8 @@ class CIM:
         print("")
         # Attach InstallESD.dmg and BaseSystem.dmg first
         esd = os.path.join(self.target_app, self.esd_loc, "InstallESD.dmg")
+        # Set a temp path to the same loc as InstallESD - just in case we're 10.14 or newer
+        bsy = os.path.join(self.target_app, self.esd_loc, "BaseSystem.dmg")
         if not os.path.exists(esd):
             self.u.head("Error!")
             print("")
@@ -401,21 +421,34 @@ class CIM:
             return False
         # Get the target os version
         esd_mounts = self.mount_dmg(esd, True)
-        b_system = b_mounts = esd_mount = None
-        print("Resolving dmgs...\n")
-        for mount in esd_mounts:
-            b_test = os.path.join(mount, "BaseSystem.dmg")
-            if not os.path.exists(b_test):
-                # Missing BaseSystem.dmg
-                continue
-            # We got BaseSystem
-            esd_mount = mount
-            b_mounts = self.mount_dmg(b_test, True)
+        b_system = b_mounts = esd_mount = b_loc = None
+        if len(esd_mounts):
+            # Set it to the first by default
+            esd_mount = esd_mounts[0]
+        if not os.path.exists(bsy):
+            print("Resolving dmgs...\n")
+            for mount in esd_mounts:
+                b_test = os.path.join(mount, "BaseSystem.dmg")
+                if not os.path.exists(b_test):
+                    # Missing BaseSystem.dmg
+                    continue
+                # We got BaseSystem
+                esd_mount = mount
+                b_loc = b_test
+                b_chunk = os.path.join(mount, "BaseSystem.chunklist")
+                b_mounts = self.mount_dmg(b_loc, True)
+                if len(b_mounts):
+                    # There's at least one mount point
+                    b_system = b_mounts[0]
+                break
+        else:
+            b_loc = bsy
+            b_chunk = os.path.join(self.target_app, self.esd_loc, "BaseSystem.chunklist")
+            b_mounts = self.mount_dmg(b_loc, True)
             if len(b_mounts):
                 # There's at least one mount point
                 b_system = b_mounts[0]
-            break
-        if not esd_mount or not b_system:
+        if not esd_mount or not b_system or not os.path.exists(b_chunk):
             # We are missing essential stuff! Unmount drives
             self.unmount_dmg(b_mounts)
             self.unmount_dmg(esd_mounts)
@@ -428,6 +461,7 @@ class CIM:
         print("Restoring OS X Base System to {}.\nThis will take awhile...\n".format(self.target_disk['name']))
         # asr -source "$insBaseSystemMount" -target "$usbMount" -erase -noprompt
         self.r.run({"args":[
+            "/usr/bin/sudo",
             "/usr/sbin/asr", 
             "-source", 
             b_system, 
@@ -468,15 +502,15 @@ class CIM:
         print("Copying packages from OS X Base System.\nThis will take awhile...")
         td_mount = self.d.get_mount_point(self.target_disk['identifier'])
         out = self.r.run([
-            {"args":["/bin/rm", "-Rf", os.path.join(td_mount, "System/Installation/Packages")], "stream":True},
-            {"args":["/bin/cp", "-R", "-p", os.path.join(esd_mount, "Packages"), os.path.join(td_mount, "System/Installation/Packages")], "stream":True},
+            {"args":["/usr/bin/sudo", "/bin/rm", "-Rf", os.path.join(td_mount, "System/Installation/Packages")], "stream":True},
+            {"args":["/usr/bin/sudo", "/bin/cp", "-R", "-p", os.path.join(esd_mount, "Packages"), os.path.join(td_mount, "System/Installation/Packages")], "stream":True},
             {
-                "args":["/bin/cp", "-R", "-p", os.path.join(esd_mount, "BaseSystem.chunklist"), os.path.join(td_mount, "BaseSystem.chunklist")],
+                "args":["/usr/bin/sudo", "/bin/cp", "-R", "-p", b_chunk, os.path.join(td_mount, "BaseSystem.chunklist")],
                 "stream":True,
                 "message":"Copying BaseSystem.chunklist to {}".format(os.path.basename(td_mount))
             },
             {
-                "args":["/bin/cp", "-R", "-p", os.path.join(esd_mount, "BaseSystem.dmg"), os.path.join(td_mount, "BaseSystem.dmg")],
+                "args":["/usr/bin/sudo", "/bin/cp", "-R", "-p", b_loc, os.path.join(td_mount, "BaseSystem.dmg")],
                 "stream":True,
                 "message":"Copying BaseSystem.dmg to {}".format(os.path.basename(td_mount))
             }
