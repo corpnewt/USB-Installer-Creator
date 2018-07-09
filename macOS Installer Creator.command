@@ -29,7 +29,7 @@ class CIM:
             "cimargs" : [
                 "/usr/bin/sudo", 
                 "[[target_app]]/Contents/Resources/createinstallmedia", 
-                "---volume", 
+                "--volume", 
                 "[[mount_point]]",
                 "--applicationpath",
                 "[[target_app]]",
@@ -145,7 +145,7 @@ class CIM:
 
     def mount_dmg(self, dmg, no_browse = False):
         # Mounts the passed dmg and returns the mount point(s)
-        args = ["/usr/bin/hdiutil", "attach", dmg, "-plist"]
+        args = ["/usr/bin/hdiutil", "attach", dmg, "-plist", "-noverify"]
         if no_browse:
             args.append("-nobrowse")
         out = self.r.run({"args":args})
