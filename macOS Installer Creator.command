@@ -464,11 +464,12 @@ class CIM:
             "/usr/bin/sudo",
             "/usr/sbin/asr", 
             "-source", 
-            b_system, 
+            b_loc, 
             "-target", 
             self.d.get_mount_point(self.target_disk['identifier']),
             "-erase",
-            "-noprompt"
+            "-noprompt",
+            "-noverify"
         ], "stream":True})
         # Resolve the disk - use the identifier to locate
         self.target_disk = self.resolve_disk(self.target_disk['identifier'])
