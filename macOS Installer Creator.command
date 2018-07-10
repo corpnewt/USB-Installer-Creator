@@ -24,7 +24,7 @@ class CIM:
         self.min_cim = "10.9.0"
         self.v_default = {
             "version" : "0.0.0", 
-            "operand" : "gtr", 
+            "operand" : ">", 
             "methods" : ["createinstallmedia", "asr"], 
             "cimargs" : [
                 "/usr/bin/sudo", 
@@ -39,7 +39,7 @@ class CIM:
         self.versions = [
             { 
                 "version" : "10.14.0", 
-                "operand" : "geq",
+                "operand" : ">=",
                 "cimargs" : [
                     "/user/bin/sudo",
                     "[[target_app]]/Contents/Resources/createinstallmedia",
@@ -50,6 +50,7 @@ class CIM:
                 ]
             }
         ]
+
     def select_method(self):
         self.u.head("Creation Method")
         print("")
@@ -151,15 +152,14 @@ class CIM:
         out = self.r.run({"args":args})
         if out[2] != 0:
             # Failed!
-            print(out[1])
-            return []
+            raise Exception("Mount Failed!", "{} failed to mount:\n\n{}".format(os.path.basename(dmg), out[1]))
         # Get the plist data returned, and locate the mount points
         try:
             plist_data = plist.loads(out[0])
             mounts = [x["mount-point"] for x in plist_data.get("system-entities", []) if "mount-point" in x]
             return mounts
         except:
-            return []
+            raise Exception("Mount Failed!", "No mount points returned from {}".format(os.path.basename(dmg)))
 
     def unmount_dmg(self, mount_point):
         # Unmounts the passed dmg or mount point - retries with force if failed
@@ -181,6 +181,10 @@ class CIM:
             unmounted.append(m)
         return unmounted
 
+    def sum_lists(self, *args):
+        # Returns a list that is the sum of all the passed lists
+        return [y for x in args for y in x if type(x) is list]
+
     def check_operand(self, target_os, check_os, operand):
         # Checks the two OS versions - and sees if they fit the operand
         # target_os vs check_os
@@ -189,11 +193,11 @@ class CIM:
         # lss, leq, equ, geq, gtr
         #  <    <=   ==   >=   >
         checks = []
-        if "eq" in operand.lower():
+        if "=" in operand.lower():
             checks.append(None)
-        if "g" in operand.lower():
+        if ">" in operand.lower():
             checks.append(False)
-        elif "l" in operand.lower():
+        elif "<" in operand.lower():
             checks.append(True)
         if self.u.compare_versions(target_os, check_os) in checks:
             return True
@@ -211,89 +215,25 @@ class CIM:
         cim = os.path.join(self.target_app, "Contents/Resources/createinstallmedia")
         # Validate some requirements
         if not os.path.exists(esd):
-            self.u.head("Error!")
-            print("")
-            print("InstallESD.dmg doesn't exist!\n")
-            self.u.grab("Press [enter] to return...")
-            return False
+            raise Exception("Missing Files!", "InstallESD.dmg doesn't exist!")
         if self.method.lower() == "createinstallmedia" and not os.path.exists(cim):
             # CIM doesn't exist :(
-            self.u.head("Error!")
-            print("")
-            print("Couldn't find createinstallmedia!\n")
-            self.u.grab("Press [enter] to return...")
-            return False
-        if not os.path.exists(bsy):
-            # We need to get the BaseSystem.dmg from *within* the InstallESD.dmg
-            mounts = self.mount_dmg(esd, True)
-            b_system = s_loc = s_vers = None
-            for mount in mounts:
-                b_system = None
-                s_vers   = None
-                b_test = os.path.join(mount, "BaseSystem.dmg")
-                if not os.path.exists(b_test):
-                    # Missing BaseSystem.dmg
-                    continue
-                b_system = b_test
-                b_mounts = self.mount_dmg(b_system, True)
-                for m in b_mounts:
-                    s_test = os.path.join(m, "System/Library/CoreServices/SystemVersion.plist")
-                    if not os.path.exists(s_test):
-                        continue
-                    # Found it - let's get the version from it
-                    try:
-                        plist_data = plist.readPlist(s_test)
-                        s_vers = plist_data["ProductVersion"]
-                        break
-                    except:
-                        s_vers = None
-                # Unmount the attempted BaseSystem mounts
-                self.unmount_dmg(b_mounts)
-                if b_system and s_vers:
-                    # Gotem!
-                    self.target_os = s_vers
-                    break
-            # Unmount the ESD dmg stuff
-            self.unmount_dmg(mounts)
-        else:
-            b_system = bsy
-            b_mounts = self.mount_dmg(b_system, True)
-            for m in b_mounts:
-                s_test = os.path.join(m, "System/Library/CoreServices/SystemVersion.plist")
-                if not os.path.exists(s_test):
-                    continue
-                # Found it - let's get the version from it
-                try:
-                    plist_data = plist.readPlist(s_test)
-                    self.target_os = plist_data["ProductVersion"]
-                    break
-                except:
-                    self.target_os = None
-        if not b_system:
-            self.u.head("Error!")
-            print("")
-            print("Couldn't locate BaseSystem.dmg!\n")
-            self.u.grab("Press [enter] to return...")
-            return False
-        if not self.target_os:
-            self.u.head("Error!")
-            print("")
-            print("Couldn't locate ProductVersion from SystemVersion.plist!\n")
-            self.u.grab("Press [enter] to return...")
-            return False
+            raise Exception("Missing Files!", "Couldn't find createinstallmedia!")
+        # Set the target os version
+        self.target_os = self.get_target_version()
         # Ask the user if they'd like to format
         if self.format_prompt() and not self.do_format(self.target_disk['identifier']):
-            self.u.head("Error!")
-            print("")
-            print("Hmmm - either formatting failed, or the disk number changed\nand I couldn't find it again...\n")
-            self.u.grab("Press [enter] to return...")
-            return False
+            raise Exception("Formatting Issue!", "Hmmm - either formatting failed, or the disk number changed\nand I couldn't find it again...")
         # Setup our targets and such
         if self.method.lower() == "createinstallmedia":
-            return self.create_with_cim()
+            self.create_with_cim()
         else:
-            return self.create_with_asr()
-        return False
+            if self.check_operand(self.target_os, "10.9", "<"):
+                self.asr_lion()
+            elif self.check_operand(self.target_os, "10.13", "<"):
+                self.asr_sierra()
+            else:
+                self.asr_high_sierra()
 
     def format_prompt(self):
         # Ask the user if they want to format the usb with the following:
@@ -357,18 +297,50 @@ class CIM:
     def rename_disk(self, disk, name):
         self.r.run({"args":["/usr/sbin/diskutil", "rename", disk, name], "stream":True})
 
+    def get_target_version(self):
+        # Set temp InstallESD.dmg and BaseSystem.dmg paths to test
+        esd = os.path.join(self.target_app, self.esd_loc, "InstallESD.dmg")
+        bsy = os.path.join(self.target_app, self.esd_loc, "BaseSystem.dmg")
+        # Set temp version stuff
+        vers = None
+        b_mounts = e_mounts = []
+        if os.path.exists(bsy):
+            # We got BaseSystem.dmg - mount it and save the path
+            b_mounts = self.mount_dmg(bsy, True)
+            s_plist = os.path.join(b_mounts[0], "System/Library/CoreServices/SystemVersion.plist")
+        elif os.path.exists(esd):
+            # No BaseSystem.dmg - let's check InstallESD.dmg
+            e_mounts = self.mount_dmg(esd, True)
+            # Check first for SystemVersion.plist
+            s_plist = os.path.join(e_mounts[0], "System/Library/CoreServices/SystemVersion.plist")
+            if not os.path.exists(s_plist):
+                # No dice - check for BaseSystem.dmg
+                b_path = os.path.join(e_mounts[0], "BaseSystem.dmg")
+                if not os.path.exists(b_path):
+                    raise Exception("Missing Files!", "Couldn't find SystemVersion.plist!", e_mounts)
+                b_mounts = self.mount_dmg(b_path, True)
+                s_plist = os.path.join(b_mounts[0], "System/Library/CoreServices/SystemVersion.plist")
+                if not os.path.exists(s_plist):
+                    raise Exception("Missing Files!", "Couldn't find SystemVersion.plist!", self.sum_lists(b_mounts, e_mounts))
+        if not os.path.exists(s_plist):
+            raise Exception("Version Error!", "Unable to locate SystemVersion.plist", self.sum_lists(b_mounts, e_mounts))
+        # Found it - let's get the version from it
+        print("b_mounts", b_mounts, "e_mounts", e_mounts)
+        try:
+            plist_data = plist.readPlist(s_plist)
+            s_vers = plist_data["ProductVersion"]
+            # Unmount the disks first
+            self.unmount_dmg(self.sum_lists(b_mounts, e_mounts))
+            return s_vers
+        except Exception as e:
+            raise Exception("Plist Parse Error!", "Failed to parse SystemVersion.plist:\n\n{}".format(str(e)), self.sum_lists(b_mounts, e_mounts))
+
     def create_with_cim(self, notify = False):
         # First, make sure we can run createinstallmedia on the
         # target dmg's os
         if self.u.compare_versions(self.target_os, self.min_cim) == True:
             # Version too low for CIM
-            self.u.head("OS Version Too Low")
-            print("")
-            print("The target OS version ({}) is lower than the minimum".format(self.target_os))
-            print("needed to use createinstallmedia ({}).".format(self.min_cim))
-            print("")
-            self.u.grab("Press [enter] to return...")
-            return False
+            raise Exception("OS Version Too Low!", "The target OS version ({}) is lower than the minimum\nneeded to use createinstallmedia ({})".format(self.target_os, self.min_cim))
         # Save the current disk's name
         original_name = self.target_disk['name']
         self.u.head("Creating with CIM")
@@ -384,41 +356,25 @@ class CIM:
         # Check if the target disk is mounted
         disk_mount = self.d.get_mount_point(self.target_disk["identifier"])
         if not disk_mount:
-            self.u.head("Error!")
-            print("")
-            print("{} ({}) isn't mounted!\n".format(self.target_disk['name'], self.target_disk['identifier']))
-            self.u.grab("Press [enter] to return...")
-            return False
+            raise Exception("Error!", "{} ({}) isn't mounted!\n".format(self.target_disk['name'], self.target_disk['identifier']))
         # Replace [[target_app]] and [[mount_point]] with their respective values
         for arg in cim_args:
             cim_args_final.append(arg.replace("[[target_app]]", self.target_app).replace("[[mount_point]]", disk_mount))
         # Print this out for the user so we can see what's up
         out = self.r.run({"args":cim_args_final, "stream":True})
         if out[2] != 0:
-            self.u.head("Error!")
-            print("")
-            print("CreateInstallMedia failed!\n")
-            self.u.grab("Press [enter] to return...")
-            return False
+            raise Exception("Create Failed!", "CreateInstallMedia failed! :(\n\n{}".format(out[1]))
         if self.rename:
             self.rename_disk(self.target_disk['identifier'], original_name)
         return True
     
-    def create_with_asr(self, notify = False):
-        original_name = self.target_disk['name']
-        # Use Apple Software Restore to clone the disk
-        self.u.head("Creating with ASR")
-        print("")
+    '''def create_with_asr(self, notify = False):
         # Attach InstallESD.dmg and BaseSystem.dmg first
         esd = os.path.join(self.target_app, self.esd_loc, "InstallESD.dmg")
         # Set a temp path to the same loc as InstallESD - just in case we're 10.14 or newer
         bsy = os.path.join(self.target_app, self.esd_loc, "BaseSystem.dmg")
         if not os.path.exists(esd):
-            self.u.head("Error!")
-            print("")
-            print("Couldn't locate InstallESD.dmg!\n")
-            self.u.grab("Press [enter] to return...")
-            return False
+            raise Exception("Missing Files!", "InstallESD.dmg doesn't exist!")
         # Get the target os version
         esd_mounts = self.mount_dmg(esd, True)
         b_system = b_mounts = esd_mount = b_loc = None
@@ -450,13 +406,7 @@ class CIM:
                 b_system = b_mounts[0]
         if not esd_mount or not b_system or not os.path.exists(b_chunk):
             # We are missing essential stuff! Unmount drives
-            self.unmount_dmg(b_mounts)
-            self.unmount_dmg(esd_mounts)
-            self.u.head("Error!")
-            print("")
-            print("The installer was missing required files!\n")
-            self.u.grab("Press [enter] to return...")
-            return False
+            raise Exception("Missing Files!", "The installer was missing required files!", b_mounts.extend(esd_mounts))
         # At this point, InstallESD and BaseSystem should be located and mounted
         print("Restoring OS X Base System to {}.\nThis will take awhile...\n".format(self.target_disk['name']))
         # asr -source "$insBaseSystemMount" -target "$usbMount" -erase -noprompt
@@ -475,13 +425,7 @@ class CIM:
         self.target_disk = self.resolve_disk(self.target_disk['identifier'])
         if not self.target_disk:
             # We lost our target drive! Unmount drives
-            self.unmount_dmg(b_mounts)
-            self.unmount_dmg(esd_mounts)
-            self.u.head("Error!")
-            print("")
-            print("Well.. this is embarrassing.  I seem to have lost\nthe target drive...\n")
-            self.u.grab("Press [enter] to return...")
-            return False
+            raise Exception("Missing Disk!", "Well.. this is embarrassing.  I seem to have lost\nthe target drive...", b_mounts.extend(esd_mounts))
         # Rename the disk back
         if self.rename:
             print("Renaming {} --> {}".format(self.target_disk['name'], original_name))
@@ -490,13 +434,7 @@ class CIM:
         self.target_disk = self.resolve_disk(self.target_disk['identifier'])
         if not self.target_disk:
             # We lost our target drive! Unmount drives
-            self.unmount_dmg(b_mounts)
-            self.unmount_dmg(esd_mounts)
-            self.u.head("Error!")
-            print("")
-            print("Well.. this is embarrassing.  I seem to have lost\nthe target drive...\n")
-            self.u.grab("Press [enter] to return...")
-            return False
+            raise Exception("Missing Disk!", "Well.. this is embarrassing.  I seem to have lost\nthe target drive...", b_mounts.extend(esd_mounts))
         # Unmount BaseSystem
         self.unmount_dmg(b_mounts)
         # Remove packages, then copy over other stuffs
@@ -523,12 +461,155 @@ class CIM:
             out = out[-1]
         if out[2] != 0:
             # Failed!
-            self.u.head("Error!")
-            print("")
-            print(out[1])
-            self.u.grab("Press [enter] to return...")
-            return False
-        return True
+            raise Exception("Create Failed!", "ASR failed! :(\n\n{}".format(out[1]))
+        return True'''
+
+    def asr_lion(self, notify = False):
+        # Save the original name in case we need to rename back
+        original_name = self.target_disk['name']
+        install_esd = os.path.join(self.target_app, self.esd_loc, "InstallESD.dmg")
+        # Use Apple Software Restore to clone the disk
+        self.u.head("Creating with ASR - 10.7 -> 10.8 Method")
+        print("")
+        # Actually restore the dmg
+        print("Restoring InstallESD to {}.\nThis will take awhile...".format(self.target_disk['name']))
+        out = self.r.run({"args":[
+            "/usr/bin/sudo",
+            "/usr/sbin/asr", 
+            "-source", 
+            install_esd, 
+            "-target", 
+            self.d.get_mount_point(self.target_disk['identifier']),
+            "-erase",
+            "-noprompt",
+            "-noverify"
+        ], "stream":True})
+        if out[2] != 0:
+            # Failed!
+            raise Exception("Create Failed!", "ASR Failed! :(\n\n{}".format(out[1]))
+        # Rename the disk back
+        if self.rename:
+            self.target_disk = self.resolve_disk(self.target_disk['identifier'])
+            if self.target_disk:
+                print("Renaming {} --> {}".format(self.target_disk['name'], original_name))
+                self.rename_disk(self.target_disk['identifier'], original_name)
+                self.target_disk = self.resolve_disk(self.target_disk['identifier'])
+
+    def asr_sierra(self, notify = False):
+        # Save the original name in case we need to rename back
+        original_name = self.target_disk['name']
+        install_esd = os.path.join(self.target_app, self.esd_loc, "InstallESD.dmg")
+        # Use Apple Software Restore to clone the disk
+        self.u.head("Creating with ASR - 10.9 -> 10.12 Method")
+        print("")
+        print("Mounting InstallESD.dmg...")
+        esd_mounts = self.mount_dmg(install_esd, True)
+        esd_mount = esd_mounts[0]
+        b_loc = os.path.join(esd_mount, "BaseSystem.dmg")
+        print("Restoring BaseSystem.dmg to {}.\n\tThis will take awhile...".format(self.target_disk['name']))
+        # asr -source "$insBaseSystemMount" -target "$usbMount" -erase -noprompt
+        out = self.r.run({"args":[
+            "/usr/bin/sudo",
+            "/usr/sbin/asr", 
+            "-source", 
+            b_loc, 
+            "-target", 
+            self.d.get_mount_point(self.target_disk['identifier']),
+            "-erase",
+            "-noprompt",
+            "-noverify"
+        ], "stream":True})
+        if out[2] != 0:
+            raise Exception("Create Failed!", "ASR failed! :(\n\n{}".format(out[1]))
+        if self.rename:
+            self.target_disk = self.resolve_disk(self.target_disk['identifier'])
+            if self.target_disk:
+                print("Renaming {} --> {}".format(self.target_disk['name'], original_name))
+                self.rename_disk(self.target_disk['identifier'], original_name)
+                self.target_disk = self.resolve_disk(self.target_disk['identifier'])
+        # Remove packages, then copy over other stuffs
+        print("Copying packages from OS X Base System.\nThis will take awhile...")
+        td_mount = self.d.get_mount_point(self.target_disk['identifier'])
+        out = self.r.run([
+            {
+                "args":["/usr/bin/sudo", "/bin/rm", "-Rf", 
+                os.path.join(td_mount, "System/Installation/Packages")], 
+                "stream":True,
+                "message":"Removing broken Packages alias..."
+            },
+            {
+                "args":["/usr/bin/sudo", "/bin/cp", "-R", "-p", 
+                os.path.join(esd_mount, "Packages"), 
+                os.path.join(td_mount, "System/Installation/Packages")], 
+                "stream":True,
+                "message":"Copying installation packages\n\tThis will take awhile..."
+            },
+            {
+                "args":["/usr/bin/sudo", "/bin/cp", "-R", "-p", b_chunk, os.path.join(td_mount, "BaseSystem.chunklist")],
+                "stream":True,
+                "message":"Copying BaseSystem.chunklist to {}...".format(os.path.basename(td_mount))
+            },
+            {
+                "args":["/usr/bin/sudo", "/bin/cp", "-R", "-p", b_loc, os.path.join(td_mount, "BaseSystem.dmg")],
+                "stream":True,
+                "message":"Copying BaseSystem.dmg to {}...\n\tThis will take awhile...".format(os.path.basename(td_mount))
+            }
+        ], True)
+        # Check for errors
+        if type(out) is list:
+            out = out[-1]
+        if out[2] != 0:
+            # Failed!
+            raise Exception("Create Failed!", "ASR failed! :(\n\n{}".format(out[1]))
+
+    def asr_high_sierra(self, notify = False):
+        # Save the original name in case we need to rename back
+        original_name = self.target_disk['name']
+        base_system = os.path.join(self.target_app, self.esd_loc, "BaseSystem.dmg")
+        # Use Apple Software Restore to clone the disk
+        self.u.head("Creating with ASR - 10.13+ Method")
+        print("")
+        print("Restoring BaseSystem.dmg to {}.\n\tThis will take awhile...".format(self.target_disk['name']))
+        # asr -source "$insBaseSystemMount" -target "$usbMount" -erase -noprompt
+        out = self.r.run({"args":[
+            "/usr/bin/sudo",
+            "/usr/sbin/asr", 
+            "-source", 
+            base_system, 
+            "-target", 
+            self.d.get_mount_point(self.target_disk['identifier']),
+            "-erase",
+            "-noprompt",
+            "-noverify"
+        ], "stream":True})
+        if out[2] != 0:
+            # Failed!
+            raise Exception("Create Failed!", "ASR failed! :(\n\n{}".format(out[1]))
+        if self.rename:
+            self.target_disk = self.resolve_disk(self.target_disk['identifier'])
+            if self.target_disk:
+                print("Renaming {} --> {}".format(self.target_disk['name'], original_name))
+                self.rename_disk(self.target_disk['identifier'], original_name)
+                self.target_disk = self.resolve_disk(self.target_disk['identifier'])
+        # Copy the Install macOS [whatever].app to the USB as well
+        check_path = os.path.join(self.d.get_mount_point(self.target_disk['identifier']), os.path.basename(self.target_app))
+        if os.path.exists(check_path):
+            print("Removing old {}...".format(os.path.basename(self.target_app)))
+            out = self.r.run({"args":["/usr/bin/sudo", "/bin/rm", "-Rf", check_path], "stream":True})
+            if out[2] != 0:
+                # Failed!
+                raise Exception("Create Failed!", out[1])
+        print("Copying {} to {}.\n\tThis will take awhile...".format(os.path.basename(self.target_app), self.target_disk['name']))
+        out = self.r.run({"args":[
+            "/usr/bin/sudo",
+            "/bin/cp", 
+            "-R",
+            self.target_app,
+            self.d.get_mount_point(self.target_disk['identifier'])
+        ], "stream":True})
+        if out[2] != 0:
+            # Failed!
+            raise Exception("Create Failed!", "ASR failed! :(\n\n{}".format(out[1]))
 
     def main(self):
         # if not self.u.check_admin():
@@ -572,11 +653,32 @@ class CIM:
                     self.select_disk()
                 if not self.target_disk:
                     continue
-                if self.create_with_current():
+                try:
+                    self.create_with_current()
+                except Exception as e:
+                    # Expects the error args as follows:
+                    # Error Title
+                    # Error Text
+                    # A list of mount points to unmount if needed
+                    title   = "Error!"
+                    message = "Something went wrong :(\n\n{}".format(str(e))
+                    mounts  = []
+                    try:
+                        title   = e.args[0]
+                        message = e.args[1]
+                        mounts  = e.args[2]
+                    except:
+                        # We likely missed some stuff - carry on though
+                        pass
+                    self.u.head(title)
+                    print("")
+                    print(message)
+                    print("")
+                else:
                     # Create completed successfully - let's hang for a sec
-                    print("Created successfully!\n")
-                    self.u.grab("Press [enter] to return...")
-    
+                    print("\nCreated successfully!\n")
+                self.u.grab("Press [enter] to return...")
+                continue
 # Start the thing
 cim = CIM()
 cim.main()
