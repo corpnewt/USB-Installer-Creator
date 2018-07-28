@@ -41,37 +41,50 @@ class Utils:
                 os.execv(c, [ sys.executable, 'python'] + sys.argv)
             except:
                 exit(1)
-
-    def compare_versions(self, vers1, vers2):
+                
+    def compare_versions(self, vers1, vers2, **kwargs):
         # Helper method to compare ##.## strings
         #
         # vers1 < vers2 = True
         # vers1 = vers2 = None
         # vers1 > vers2 = False
-        #
-        # Check for equality first
-        if vers1 == vers2:
-            # Equal
-            return None
-        try:
-            v1_parts = [ int(x) for x in vers1.split(".") ]
-            v2_parts = [ int(x) for x in vers2.split(".") ]
-        except:
-            # Formatted wrong - return None
-            return None
-        total = len(v1_parts) if len(v1_parts) > len(v2_parts) else len(v2_parts)
-        for i in range(total):
-            if i >= len(v1_parts):
-                # v2 is longer
+        
+        # Sanitize the pads
+        pad = str(kwargs.get("pad", ""))
+        sep = str(kwargs.get("separator", "."))
+
+        ignore_case = kwargs.get("ignore_case", True)
+        
+        # Cast as strings
+        vers1 = str(vers1)
+        vers2 = str(vers2)
+        
+        if ignore_case:
+            vers1 = vers1.lower()
+            vers2 = vers2.lower()
+
+        # Split to lists
+        v1_parts = vers1.split(sep)
+        v2_parts = vers2.split(sep)
+        
+        # Equalize lengths
+        if len(v1_parts) < len(v2_parts):
+            v1_parts.extend([str(pad) for x in range(len(v2_parts) - len(v1_parts))])
+        elif len(v2_parts) < len(v1_parts):
+            v2_parts.extend([str(pad) for x in range(len(v1_parts) - len(v2_parts))])
+        
+        # Iterate and compare
+        for i in range(len(v1_parts)):
+            # Remove non-numeric
+            v1 = ''.join(c.lower() for c in v1_parts[i] if c.isalnum())
+            v2 = ''.join(c.lower() for c in v2_parts[i] if c.isalnum())
+            # If empty - make it a pad var
+            v1 = pad if not len(v1) else v1
+            v2 = pad if not len(v2) else v2
+            # Compare
+            if str(v1) < str(v2):
                 return True
-            if i >= len(v2_parts):
-                # v1 is longer
-                return False
-            if v1_parts[i] < v2_parts[i]:
-                # v2 is newer
-                return True
-            if v1_parts[i] > v2_parts[i]:
-                # v1 is newer
+            elif str(v1) > str(v2):
                 return False
         # Never differed - return None, must be equal
         return None
