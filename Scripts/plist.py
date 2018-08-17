@@ -80,7 +80,7 @@ def dump(value, fp, fmt=FMT_XML, sort_keys=True, skipkeys=False):
     
 def dumps(value, fmt=FMT_XML, skipkeys=False):
     if _check_py3():
-        return plistlib.dumps(value, fmt=fmt, skipkeys=skipkeys)
+        return plistlib.dumps(value, fmt=fmt, skipkeys=skipkeys).encode("utf-8")
     else:
         return plistlib.writePlistToString(value).encode("utf-8")
 
