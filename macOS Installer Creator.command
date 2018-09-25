@@ -41,7 +41,7 @@ class CIM:
                 "version" : "10.14.0", 
                 "operand" : ">=",
                 "cimargs" : [
-                    "/user/bin/sudo",
+                    "/usr/bin/sudo",
                     "[[target_app]]/Contents/Resources/createinstallmedia",
                     "--volume",
                     "[[mount_point]]",
@@ -367,102 +367,6 @@ class CIM:
         if self.rename:
             self.rename_disk(self.target_disk['identifier'], original_name)
         return True
-    
-    '''def create_with_asr(self, notify = False):
-        # Attach InstallESD.dmg and BaseSystem.dmg first
-        esd = os.path.join(self.target_app, self.esd_loc, "InstallESD.dmg")
-        # Set a temp path to the same loc as InstallESD - just in case we're 10.14 or newer
-        bsy = os.path.join(self.target_app, self.esd_loc, "BaseSystem.dmg")
-        if not os.path.exists(esd):
-            raise Exception("Missing Files!", "InstallESD.dmg doesn't exist!")
-        # Get the target os version
-        esd_mounts = self.mount_dmg(esd, True)
-        b_system = b_mounts = esd_mount = b_loc = None
-        if len(esd_mounts):
-            # Set it to the first by default
-            esd_mount = esd_mounts[0]
-        if not os.path.exists(bsy):
-            print("Resolving dmgs...\n")
-            for mount in esd_mounts:
-                b_test = os.path.join(mount, "BaseSystem.dmg")
-                if not os.path.exists(b_test):
-                    # Missing BaseSystem.dmg
-                    continue
-                # We got BaseSystem
-                esd_mount = mount
-                b_loc = b_test
-                b_chunk = os.path.join(mount, "BaseSystem.chunklist")
-                b_mounts = self.mount_dmg(b_loc, True)
-                if len(b_mounts):
-                    # There's at least one mount point
-                    b_system = b_mounts[0]
-                break
-        else:
-            b_loc = bsy
-            b_chunk = os.path.join(self.target_app, self.esd_loc, "BaseSystem.chunklist")
-            b_mounts = self.mount_dmg(b_loc, True)
-            if len(b_mounts):
-                # There's at least one mount point
-                b_system = b_mounts[0]
-        if not esd_mount or not b_system or not os.path.exists(b_chunk):
-            # We are missing essential stuff! Unmount drives
-            raise Exception("Missing Files!", "The installer was missing required files!", b_mounts.extend(esd_mounts))
-        # At this point, InstallESD and BaseSystem should be located and mounted
-        print("Restoring OS X Base System to {}.\nThis will take awhile...\n".format(self.target_disk['name']))
-        # asr -source "$insBaseSystemMount" -target "$usbMount" -erase -noprompt
-        self.r.run({"args":[
-            "/usr/bin/sudo",
-            "/usr/sbin/asr", 
-            "-source", 
-            b_loc, 
-            "-target", 
-            self.d.get_mount_point(self.target_disk['identifier']),
-            "-erase",
-            "-noprompt",
-            "-noverify"
-        ], "stream":True})
-        # Resolve the disk - use the identifier to locate
-        self.target_disk = self.resolve_disk(self.target_disk['identifier'])
-        if not self.target_disk:
-            # We lost our target drive! Unmount drives
-            raise Exception("Missing Disk!", "Well.. this is embarrassing.  I seem to have lost\nthe target drive...", b_mounts.extend(esd_mounts))
-        # Rename the disk back
-        if self.rename:
-            print("Renaming {} --> {}".format(self.target_disk['name'], original_name))
-            self.rename_disk(self.target_disk['identifier'], original_name)
-        # Resolve the disk after rename
-        self.target_disk = self.resolve_disk(self.target_disk['identifier'])
-        if not self.target_disk:
-            # We lost our target drive! Unmount drives
-            raise Exception("Missing Disk!", "Well.. this is embarrassing.  I seem to have lost\nthe target drive...", b_mounts.extend(esd_mounts))
-        # Unmount BaseSystem
-        self.unmount_dmg(b_mounts)
-        # Remove packages, then copy over other stuffs
-        print("Copying packages from OS X Base System.\nThis will take awhile...")
-        td_mount = self.d.get_mount_point(self.target_disk['identifier'])
-        out = self.r.run([
-            {"args":["/usr/bin/sudo", "/bin/rm", "-Rf", os.path.join(td_mount, "System/Installation/Packages")], "stream":True},
-            {"args":["/usr/bin/sudo", "/bin/cp", "-R", "-p", os.path.join(esd_mount, "Packages"), os.path.join(td_mount, "System/Installation/Packages")], "stream":True},
-            {
-                "args":["/usr/bin/sudo", "/bin/cp", "-R", "-p", b_chunk, os.path.join(td_mount, "BaseSystem.chunklist")],
-                "stream":True,
-                "message":"Copying BaseSystem.chunklist to {}".format(os.path.basename(td_mount))
-            },
-            {
-                "args":["/usr/bin/sudo", "/bin/cp", "-R", "-p", b_loc, os.path.join(td_mount, "BaseSystem.dmg")],
-                "stream":True,
-                "message":"Copying BaseSystem.dmg to {}".format(os.path.basename(td_mount))
-            }
-        ], True)
-        # Unmount InstallESD at this point
-        self.unmount_dmg(esd_mounts)
-        # Check for errors
-        if type(out) is list:
-            out = out[-1]
-        if out[2] != 0:
-            # Failed!
-            raise Exception("Create Failed!", "ASR failed! :(\n\n{}".format(out[1]))
-        return True'''
 
     def asr_lion(self, notify = False):
         # Save the original name in case we need to rename back
