@@ -45,9 +45,9 @@ class CIM:
                     "[[target_app]]/Contents/Resources/createinstallmedia",
                     "--volume",
                     "[[mount_point]]",
-                    "--nointeraction",
-                    "--downloadassets"
-                ]
+                    "--nointeraction"
+                ],
+                "dlassets" : True
             }
         ]
 
@@ -257,6 +257,22 @@ class CIM:
             elif menu == "n":
                 return False
 
+    def dl_assets_prompt(self):
+        # Ask the user if they want to download assets before creating the USB
+        while True:
+            self.u.head("Download Assets?")
+            print("")
+            print("Would you like to download additional installer assets?".format(self.target_disk['name'], self.target_disk['identifier']))
+            print("")
+            menu = self.u.grab("Please choose y/n:  ").lower()
+            if not len(menu):
+                continue
+            menu = menu[0]
+            if menu == "y":
+                return True
+            elif menu == "n":
+                return False
+
     def do_format(self, disk):
         # Resolve to our top-level identifier, then format, then get
         # the resulting disk
@@ -325,7 +341,6 @@ class CIM:
         if not os.path.exists(s_plist):
             raise Exception("Version Error!", "Unable to locate SystemVersion.plist", self.sum_lists(b_mounts, e_mounts))
         # Found it - let's get the version from it
-        print("b_mounts", b_mounts, "e_mounts", e_mounts)
         try:
             plist_data = plist.readPlist(s_plist)
             s_vers = plist_data["ProductVersion"]
@@ -346,11 +361,22 @@ class CIM:
         self.u.head("Creating with CIM")
         print("")
         print("This will take some time - sit back and relax for a bit.\n\n")
-        # Let's setup our args
+        # Let's setup our args - also check if we're downloading assets
         cim_args = [x for x in self.v_default.get("cimargs", [])]
+        # Initialize our asset downloading capabilities
+        dl_assets = False
         for v in self.versions:
             if self.check_operand(self.target_os, v.get("version", "0.0.0"), v.get("operand", "lss")):
                 cim_args = [x for x in v.get("cimargs", self.v_default.get("cimargs", []))]
+                dl_assets = v.get("dlassets",False)
+        # Check if we can download assets - and prompt the user as needed
+        if dl_assets and self.dl_assets_prompt():
+            # We want to dl extra assets - we *do* need to redo our header though
+            # as this overrides it
+            self.u.head("Creating with CIM")
+            print("")
+            print("This will take some time - sit back and relax for a bit.\n\n")
+            cim_args.append("--downloadassets")
         # Replace text with what's needed
         cim_args_final = []
         # Check if the target disk is mounted
