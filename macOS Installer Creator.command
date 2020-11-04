@@ -436,6 +436,7 @@ class CIM:
         esd_mounts = self.mount_dmg(install_esd, True)
         esd_mount = esd_mounts[0]
         b_loc = os.path.join(esd_mount, "BaseSystem.dmg")
+        b_chunk = os.path.join(esd_mount, "BaseSystem.chunklist")
         print("Restoring BaseSystem.dmg to {}.\n\tThis will take awhile...".format(self.target_disk['name']))
         # asr -source "$insBaseSystemMount" -target "$usbMount" -erase -noprompt
         out = self.r.run({"args":[
