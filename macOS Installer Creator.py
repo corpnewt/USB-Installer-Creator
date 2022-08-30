@@ -354,6 +354,7 @@ class CIM:
             s_vers = plist_data.get("ProductVersion",plist_data.get("Assets",[{}])[0].get("OSVersion",None))
             # Unmount the disks first
             self.unmount_dmg(self.sum_lists(b_mounts, e_mounts))
+            if not s_vers: raise Exception("Plist Parse Error!","Could not locate installer OS version!")
             return s_vers
         except Exception as e:
             raise Exception("Plist Parse Error!", "Failed to parse system version:\n\n{}".format(str(e)), self.sum_lists(b_mounts, e_mounts))
