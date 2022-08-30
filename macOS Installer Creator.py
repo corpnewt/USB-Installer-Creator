@@ -132,11 +132,10 @@ class CIM:
         if not p:
             self.select_app()
             return
-        checkpath = os.path.join(p, self.esd_loc, "InstallESD.dmg")
-        if not os.path.exists(checkpath):
-            self.u.head("InstallESD.dmg doesn't exist!")
+        if not next((x for x in ("InstallESD.dmg","SharedSupport.dmg") if os.path.exists(os.path.join(p,self.esd_loc,x))),None):
+            self.u.head("Missing Files!")
             print("")
-            print("InstallESD.dmg was not found at:")
+            print("Could not find InstallESD.dmg or SharedSuport.dmg at:")
             print(os.path.abspath(checkpath))
             print("")
             self.u.grab("Press [enter] to select another install app...")
@@ -212,10 +211,14 @@ class CIM:
         esd = os.path.join(self.target_app, self.esd_loc, "InstallESD.dmg")
         # Set a temp path to the same loc as InstallESD - just in case we're 10.14 or newer
         bsy = os.path.join(self.target_app, self.esd_loc, "BaseSystem.dmg")
+        # And another temp path for SharedSupport.dmg
+        ssp = os.path.join(self.target_app, self.esd_loc, "SharedSupport.dmg")
         cim = os.path.join(self.target_app, "Contents/Resources/createinstallmedia")
         # Validate some requirements
-        if not os.path.exists(esd):
-            raise Exception("Missing Files!", "InstallESD.dmg doesn't exist!")
+        if not os.path.exists(esd) and not os.path.exists(ssp):
+            raise Exception("Missing Files!", "Could not find InstallESD.dmg or SharedSupport.dmg!")
+        if self.method.lower() == "asr" and not os.path.exists(esd):
+            raise Exception("Missing Files!", "Could not find InstallESD.dmg!")
         if self.method.lower() == "createinstallmedia" and not os.path.exists(cim):
             # CIM doesn't exist :(
             raise Exception("Missing Files!", "Couldn't find createinstallmedia!")
@@ -317,9 +320,14 @@ class CIM:
         # Set temp InstallESD.dmg and BaseSystem.dmg paths to test
         esd = os.path.join(self.target_app, self.esd_loc, "InstallESD.dmg")
         bsy = os.path.join(self.target_app, self.esd_loc, "BaseSystem.dmg")
+        ssp = os.path.join(self.target_app, self.esd_loc, "SharedSupport.dmg")
         # Set temp version stuff
         vers = None
         b_mounts = e_mounts = []
+        if os.path.exists(ssp):
+            # We got SharedSupport - mount it and load the .json
+            b_mounts = self.mount_dmg(ssp, True)
+            s_plist = os.path.join(b_mounts[0],"com_apple_MobileAsset_MobileSoftwareUpdate_MacUpdateBrain/com_apple_MobileAsset_MobileSoftwareUpdate_MacUpdateBrain.xml")
         if os.path.exists(bsy):
             # We got BaseSystem.dmg - mount it and save the path
             b_mounts = self.mount_dmg(bsy, True)
@@ -343,12 +351,12 @@ class CIM:
         # Found it - let's get the version from it
         try:
             plist_data = plist.readPlist(s_plist)
-            s_vers = plist_data["ProductVersion"]
+            s_vers = plist_data.get("ProductVersion",plist_data.get("Assets",[{}])[0].get("OSVersion",None))
             # Unmount the disks first
             self.unmount_dmg(self.sum_lists(b_mounts, e_mounts))
             return s_vers
         except Exception as e:
-            raise Exception("Plist Parse Error!", "Failed to parse SystemVersion.plist:\n\n{}".format(str(e)), self.sum_lists(b_mounts, e_mounts))
+            raise Exception("Plist Parse Error!", "Failed to parse system version:\n\n{}".format(str(e)), self.sum_lists(b_mounts, e_mounts))
 
     def create_with_cim(self, notify = False):
         # First, make sure we can run createinstallmedia on the
