@@ -322,12 +322,21 @@ class CIM:
         bsy = os.path.join(self.target_app, self.esd_loc, "BaseSystem.dmg")
         ssp = os.path.join(self.target_app, self.esd_loc, "SharedSupport.dmg")
         # Set temp version stuff
-        vers = None
+        vers = s_plist = None
         b_mounts = e_mounts = []
         if os.path.exists(ssp):
-            # We got SharedSupport - mount it and load the .json
+            # We got SharedSupport - mount it and load the .xml
             b_mounts = self.mount_dmg(ssp, True)
-            s_plist = os.path.join(b_mounts[0],"com_apple_MobileAsset_MobileSoftwareUpdate_MacUpdateBrain/com_apple_MobileAsset_MobileSoftwareUpdate_MacUpdateBrain.xml")
+            for d in os.listdir(b_mounts[0]):
+                full_path = os.path.join(b_mounts[0],d)
+                if not os.path.isdir(full_path) or not d.lower().startswith("com_apple_mobileasset_"):
+                    continue
+                # Got our folder - check for our .xml file
+                for f in os.listdir(full_path):
+                    if f.lower().startswith("com_apple_mobileasset_") and f.lower().endswith(".xml"):
+                        s_plist = os.path.join(full_path,f)
+                        break
+                break
         if os.path.exists(bsy):
             # We got BaseSystem.dmg - mount it and save the path
             b_mounts = self.mount_dmg(bsy, True)
@@ -346,7 +355,7 @@ class CIM:
                 s_plist = os.path.join(b_mounts[0], "System/Library/CoreServices/SystemVersion.plist")
                 if not os.path.exists(s_plist):
                     raise Exception("Missing Files!", "Couldn't find SystemVersion.plist!", self.sum_lists(b_mounts, e_mounts))
-        if not os.path.exists(s_plist):
+        if not s_plist or not os.path.exists(s_plist):
             raise Exception("Version Error!", "Unable to locate SystemVersion.plist", self.sum_lists(b_mounts, e_mounts))
         # Found it - let's get the version from it
         try:
@@ -367,9 +376,6 @@ class CIM:
             raise Exception("OS Version Too Low!", "The target OS version ({}) is lower than the minimum\nneeded to use createinstallmedia ({})".format(self.target_os, self.min_cim))
         # Save the current disk's name
         original_name = self.target_disk['name']
-        self.u.head("Creating with CIM")
-        print("")
-        print("This will take some time - sit back and relax for a bit.\n\n")
         # Let's setup our args - also check if we're downloading assets
         cim_args = [x for x in self.v_default.get("cimargs", [])]
         # Initialize our asset downloading capabilities
@@ -382,9 +388,6 @@ class CIM:
         if dl_assets and self.dl_assets_prompt():
             # We want to dl extra assets - we *do* need to redo our header though
             # as this overrides it
-            self.u.head("Creating with CIM")
-            print("")
-            print("This will take some time - sit back and relax for a bit.\n\n")
             cim_args.append("--downloadassets")
         # Replace text with what's needed
         cim_args_final = []
@@ -396,6 +399,9 @@ class CIM:
         for arg in cim_args:
             cim_args_final.append(arg.replace("[[target_app]]", self.target_app).replace("[[mount_point]]", disk_mount))
         # Print this out for the user so we can see what's up
+        self.u.head("Creating with CIM")
+        print("")
+        print("This will take some time - sit back and relax for a bit.\n\n")
         out = self.r.run({"args":cim_args_final, "stream":True})
         if out[2] != 0:
             raise Exception("Create Failed!", "CreateInstallMedia failed! :(\n\n{}".format(out[1]))
